@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" debug="false">
+    <property name="PROJECT_NAME" value="test_logback_appender_app"/>
+    <contextName>${PROJECT_NAME}</contextName>
+    <appender name="CustomAppender" class="com.gzl.log.logback.appender.LogbackUnsynchronizedAppender">
+        <appName>${PROJECT_NAME}</appName>
+        <node>node197</node>
+        <logServer>http://127.0.0.1:8080/log</logServer>
+        <!--<encoder>
+            <pattern>%date %level [%thread] %logger{10} [%file : %line] %msg%n
+            </pattern>
+        </encoder>-->
+        <!--<layout
+                class="ch.qos.logback.classic.PatternLayout">
+            &lt;!&ndash;格式化输出：%d表示日期，%thread表示线程名，%-5level：级别从左显示5个字符宽度%msg：日志消息，%n是换行符 &ndash;&gt;
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} [%file : %line] - %msg%n</pattern>
+        </layout>-->
+    </appender>
+
+    <appender name="Kafka" class="com.gzl.log.core.LogbackAppender">
+        <buildStrategy class="com.gzl.log.core.build.KafkaBuildStrategy">
+            <config class="com.gzl.log.core.config.KafkaConfig">
+                <addresses>127.0.0.1:9092</addresses>
+                <topic>kafka-test-topic</topic>
+            </config>
+        </buildStrategy>
+        <deliveryStrategy
+                class="com.gzl.log.core.delivery.AsynchronousDeliveryStrategy"/>
+        <source>test-application</source>
+    </appender>
+
+
+    <root level="DEBUG">
+        <appender-ref ref="CustomAppender"/>
+    </root>
+</configuration>

@@ -1,0 +1,184 @@
+package com.gzl.log.core.sender;
+
+import com.google.common.base.Splitter;
+import com.gzl.log.core.FastjsonCodec;
+import com.gzl.log.core.config.RedisConfig;
+import com.gzl.log.vo.LogVo;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
+import org.redisson.api.RQueue;
+import org.redisson.api.RedissonClient;
+import org.redisson.Redisson;
+import org.redisson.config.Config;
+import org.redisson.config.TransportMode;
+
+import java.util.List;
+
+@Setter
+@Getter
+@Builder
+public class RedisSender implements MessageSender<LogVo> {
+
+    private RedissonClient redisClient;
+
+    private RQueue<LogVo> queue;
+
+    private RedisConfig config;
+
+    private boolean asynch = true;
+
+    @Override
+    public boolean send(LogVo event) {
+        if(asynch){
+            return queue.offer(event);
+        }else{
+            queue.offerAsync(event);
+            return true;
+        }
+    }
+
+
+    //@Override
+    public boolean send(String topic, LogVo event) {
+        return redisClient.getQueue(topic).offer(event);
+    }
+
+    //@Override
+    public boolean sendAsync(String topic, LogVo event) {
+        redisClient.getQueue(topic).offerAsync(event);
+        return true;
+    }
+
+    @Override
+    public void init() {
+        if(redisClient==null){
+            if(config.getModel().equals("single")){
+                this.singleMode();
+            }else if(config.getModel().equals("masterSlave")){
+                this.masterSlaveMode();
+            }else if(config.getModel().equals("sentinel")){
+                this.sentinelMode();
+            }else if(config.getModel().equals("cluster")){
+                this.clusterMode();
+            }
+        }
+        // init
+        queue = redisClient.getQueue(config.getTopic());
+
+
+    }
+
+//单Redis节点模式
+    private void singleMode(){
+            List<String> addresses = Splitter.on(',').omitEmptyStrings().trimResults().splitToList(this.getConfig().getAddresses());
+            if (addresses.size() > 0) {
+                Config config = new Config();
+                config.setTransportMode(TransportMode.EPOLL);
+                config.useSingleServer()
+                        .setAddress(addresses.get(0))
+                        .setPassword(this.getConfig().getPassword())
+                        .setDatabase(this.getConfig().getDatabase())
+                        .setConnectTimeout(this.getConfig().getConnectTimeout())
+                        //.setReconnectionTimeout(this.getConfig().getReconnectionTimeout())
+                        .setRetryInterval(this.getConfig().getRetryInterval())
+                        //.setFailedAttempts(this.getConfig().getFailedAttempts())
+                        .setRetryAttempts(this.getConfig().getRetryAttempts())
+                        //.setPingTimeout(this.getConfig().getPingTimeout())
+                        .setConnectionPoolSize(this.getConfig().getConnectionPoolSize());
+                redisClient = Redisson.create(config);
+            }
+    }
+
+    private static final String REDIS_CONNECTION_PREFIX="redis://";
+    //主从模式
+    private void masterSlaveMode(){
+        List<String> addresses = Splitter.on(',').omitEmptyStrings().trimResults().splitToList(this.getConfig().getAddresses());
+        if (addresses.size() > 0) {
+            String master = addresses.get(0);
+            if(!master.startsWith(REDIS_CONNECTION_PREFIX)){
+                master = REDIS_CONNECTION_PREFIX+master;
+            }
+            addresses.remove(master);
+            for(String add: addresses){
+                if(!add.startsWith(REDIS_CONNECTION_PREFIX)){
+                    add = REDIS_CONNECTION_PREFIX+add;
+                }
+            }
+
+            Config config = new Config();
+            config.setTransportMode(TransportMode.EPOLL);
+            config.useMasterSlaveServers()
+                    .setMasterAddress(master)
+                    .addSlaveAddress((String[]) addresses.toArray())
+                    .setPassword(this.getConfig().getPassword())
+                    .setDatabase(this.getConfig().getDatabase())
+                    .setMasterConnectionPoolSize(5)//主节点连接池大小
+                    .setMasterConnectionMinimumIdleSize(2)//主节点最小空闲连接数
+                    .setSlaveConnectionPoolSize(5)//从节点连接池大小
+                    .setSlaveConnectionMinimumIdleSize(2) ;//从节点最小空闲连接数
+            redisClient = Redisson.create(config);
+        }
+    }
+
+    //集群
+    private void clusterMode(){
+        List<String> addresses = Splitter.on(',').omitEmptyStrings().trimResults().splitToList(this.getConfig().getAddresses());
+        if (addresses.size() > 0) {
+
+            for(String add: addresses){
+                if(!add.startsWith(REDIS_CONNECTION_PREFIX)){
+                    add = REDIS_CONNECTION_PREFIX+add;
+                }
+            }
+
+            Config config = new Config();
+            config.setTransportMode(TransportMode.EPOLL);
+            config.useClusterServers()
+                    .setScanInterval(1000 * 2)
+                    .addNodeAddress((String[]) addresses.toArray())
+                    .setPassword(this.getConfig().getPassword())
+                    .setMasterConnectionPoolSize(5)
+                    .setMasterConnectionMinimumIdleSize(2)
+                    .setSlaveConnectionPoolSize(5)
+                    .setSlaveConnectionMinimumIdleSize(2);
+            redisClient = Redisson.create(config);
+        }
+    }
+
+    //哨兵模式
+    private void sentinelMode(){
+        List<String> addresses = Splitter.on(',').omitEmptyStrings().trimResults().splitToList(this.getConfig().getAddresses());
+        if (addresses.size() > 0) {
+
+            for(String add: addresses){
+                if(!add.startsWith(REDIS_CONNECTION_PREFIX)){
+                    add = REDIS_CONNECTION_PREFIX+add;
+                }
+            }
+
+            Config config = new Config();
+            config.setTransportMode(TransportMode.EPOLL);
+            config.useSentinelServers()
+                    .setMasterName("mymaster")
+                    .addSentinelAddress((String[]) addresses.toArray())
+                    .setPassword(this.getConfig().getPassword())
+                    .setDatabase(this.getConfig().getDatabase())
+                    .setMasterConnectionPoolSize(5)//主节点连接池大小
+                    .setMasterConnectionMinimumIdleSize(3)//主节点最小空闲连接数
+                    .setSlaveConnectionPoolSize(5)//从节点连接池大小
+                    .setSlaveConnectionMinimumIdleSize(3)//从节点最小空闲连接数
+                    .setCheckSentinelsList(false);
+            redisClient = Redisson.create(config);
+        }
+    }
+
+
+    @Override
+    public void destroy() {
+        if (redisClient == null || redisClient.isShutdown() || redisClient.isShuttingDown()) {
+            return;
+        }
+        redisClient.shutdown();
+    }
+}

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" debug="false">
+    <property name="PROJECT_NAME" value="test_logback_appender_app"/>
+    <contextName>${PROJECT_NAME}</contextName>
+
+    <!--<appender name="Kafka" class="com.gzl.log.logback.appender.LogbackAppender">
+        <appName>${PROJECT_NAME}</appName>
+        <node>node197</node>
+        <sender class="com.gzl.log.core.sender.HttpSender">
+            <timeout>1000</timeout>
+            <asynch>true</asynch>
+            <config class="com.gzl.log.core.config.HttpConfig">
+                <logServer>http://127.0.0.1:8080/log</logServer>
+            </config>
+        </sender>
+    </appender>-->
+
+    <!--<appender name="Kafka" class="com.gzl.log.logback.appender.LogbackAppender">
+        <appName>${PROJECT_NAME}</appName>
+        <node>node197</node>
+        <sender class="com.gzl.log.core.sender.KafkaSender">
+            <timeout>1000</timeout>
+            <asynch>true</asynch>
+            <config class="com.gzl.log.core.config.KafkaConfig">
+                <addresses>127.0.0.1:9092</addresses>
+                <topic>kafka-test-topic</topic>
+            </config>
+        </sender>
+    </appender>-->
+
+    <appender name="Kafka" class="com.gzl.log.logback.appender.LogbackAppender">
+        <appName>${PROJECT_NAME}</appName>
+        <node>node197</node>
+        <sender class="com.gzl.log.core.sender.RedisSender">
+            <timeout>2000</timeout>
+            <asynch>true</asynch>
+            <config class="com.gzl.log.core.config.RedisConfig">
+                <host>localhost</host>
+                <port>6379</port>
+            </config>
+        </sender>
+    </appender>
+
+    <logger name="com.gzl.log" level="INFO" additivity="false">
+        <appender-ref ref="Kafka"/>
+    </logger>
+    <!--<root level="INFO">
+        <appender-ref ref="Kafka"/>
+    </root>-->
+</configuration>
